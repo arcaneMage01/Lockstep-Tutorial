@@ -71,22 +71,26 @@ namespace Lockstep.Game {
 
 
         public void DoStart(){
+            //?? 让每个mgr 持有 通用Service引用（设计多余的感觉，何不需要的时候再使用 GetService()）
             foreach (var mgr in _mgrContainer.AllMgrs) {
                 mgr.InitReference(_serviceContainer, _mgrContainer);
             }
 
-            //bind events
+            //all mgrs listening
             foreach (var mgr in _mgrContainer.AllMgrs) {
                 _registerService.RegisterEvent<EEvent, GlobalEventHandler>("OnEvent_", "OnEvent_".Length,
                     EventHelper.AddListener, mgr);
             }
 
+            //all mgrs awake
             foreach (var mgr in _mgrContainer.AllMgrs) {
                 mgr.DoAwake(_serviceContainer);
             }
 
+            //...  没啥用
             _DoAwake(_serviceContainer);
 
+            //all mgrs doStart
             foreach (var mgr in _mgrContainer.AllMgrs) {
                 mgr.DoStart();
             }
