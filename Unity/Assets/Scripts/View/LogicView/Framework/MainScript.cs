@@ -19,9 +19,11 @@ public class MainScript : MonoBehaviour {
         gameObject.AddComponent<PingMono>();
         gameObject.AddComponent<InputMono>();
         _serviceContainer = new UnityServiceContainer();
-        _serviceContainer.GetService<IConstStateService>().GameName = "ARPGDemo";
-        _serviceContainer.GetService<IConstStateService>().IsClientMode = IsClientMode;
-        _serviceContainer.GetService<IConstStateService>().IsVideoMode = IsVideoMode;
+        var constStateService = _serviceContainer.GetService<IConstStateService>();
+        constStateService.GameName = "ARPGDemo";
+        constStateService.IsClientMode = IsClientMode;
+        constStateService.IsVideoMode = IsVideoMode;
+        
         _serviceContainer.GetService<IGameStateService>().MaxEnemyCount = MaxEnemyCount;
         Lockstep.Logging.Logger.OnMessage += UnityLogHandler.OnLog;
         Screen.SetResolution(1024, 768, false);

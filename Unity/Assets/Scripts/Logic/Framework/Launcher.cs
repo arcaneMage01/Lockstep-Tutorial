@@ -71,7 +71,7 @@ namespace Lockstep.Game {
 
 
         public void DoStart(){
-            //?? 让每个mgr 持有 通用Service引用（设计多余的感觉，何不需要的时候再使用 GetService()）
+            //?? 让每个mgr 持有 通用Service引用（设计多余的感觉，何不在需要的时候再使用 GetService()）
             foreach (var mgr in _mgrContainer.AllMgrs) {
                 mgr.InitReference(_serviceContainer, _mgrContainer);
             }
