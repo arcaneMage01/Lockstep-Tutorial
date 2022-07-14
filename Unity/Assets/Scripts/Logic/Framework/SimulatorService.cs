@@ -48,7 +48,7 @@ namespace Lockstep.Game {
         /// game init timestamp
         public long _gameStartTimestampMs = -1;
 
-        private int _tickSinceGameStart;
+        private int _tickSinceGameStart;    //当前应该跑到多少个tick
         public int TargetTick => _tickSinceGameStart + FramePredictCount;
 
         // input presend
@@ -63,7 +63,8 @@ namespace Lockstep.Game {
         private int _tickOnLastJumpTo;
         private long _timestampOnLastJumpToMs;
 
-        private bool _isDebugRollback = true;
+        
+        private bool _isDebugRollback = false;  //测试回滚  
 
         //refs 
         private IManagerContainer _mgrContainer;
@@ -213,8 +214,10 @@ namespace Lockstep.Game {
                 return;
             }
 
+            //(耗时/tick间隔 = 当前tick)
             _tickSinceGameStart =
                 (int) ((LTime.realtimeSinceStartupMS - _gameStartTimestampMs) / NetworkDefine.UPDATE_DELTATIME);
+            
             if (_constStateService.IsVideoMode) {
                 return;
             }
@@ -244,9 +247,10 @@ namespace Lockstep.Game {
             }
         }
 
-
+        //(单机模式时，DoUpdate额外的处理步骤) DoUpdate => DoClientUpdate
         private void DoClientUpdate(){
             int maxRollbackCount = 5;
+            //调试回滚
             if (_isDebugRollback && _world.Tick > maxRollbackCount && _world.Tick % maxRollbackCount == 0) {
                 var rawTick = _world.Tick;
                 var revertCount = LRandom.Range(1, maxRollbackCount);
@@ -276,6 +280,7 @@ namespace Lockstep.Game {
                 }
             }
 
+            //Run frame
             while (_world.Tick < TargetTick) {
                 FramePredictCount = 0;
                 var input = new Msg_PlayerInput(_world.Tick, LocalActorId, _inputService.GetInputCmds());
@@ -284,15 +289,17 @@ namespace Lockstep.Game {
                     _inputs = new Msg_PlayerInput[] {input}
                 };
                 _cmdBuffer.PushLocalFrame(frame);
+                //client Mode push local frame immediately
                 _cmdBuffer.PushServerFrames(new ServerFrame[] {frame});
+                
                 Simulate(_cmdBuffer.GetFrame(_world.Tick));
                 if (_commonStateService.IsPause) {
                     return;
                 }
             }
         }
-
-
+        
+        //(正常模式(非单机模式时)， DoUpdate => DoNormalUpdate
         private void DoNormalUpdate(){
             //make sure client is not move ahead too much than server
             var maxContinueServerTick = _cmdBuffer.MaxContinueServerTick;
@@ -314,6 +321,7 @@ namespace Lockstep.Game {
 
                 _cmdBuffer.PushLocalFrame(sFrame);
                 Simulate(sFrame, tick == minTickToBackup);
+                //防止一次追太长.卡顿...
                 if (LTime.realtimeSinceStartupMS > deadline) {
                     OnPursuingFrame();
                     return;
@@ -367,6 +375,7 @@ namespace Lockstep.Game {
             var input = new Msg_PlayerInput(curTick, LocalActorId, _inputService.GetInputCmds());
             var cFrame = new ServerFrame();
             var inputs = new Msg_PlayerInput[_actorCount];
+            //each actor input data
             inputs[LocalActorId] = input;
             cFrame.Inputs = inputs;
             cFrame.tick = curTick;
@@ -376,6 +385,7 @@ namespace Lockstep.Game {
             //    var playerInput = new Deserializer(input.Commands[0].content).Parse<Lockstep.Game.PlayerInput>();
             //    Debug.Log($"SendInput curTick{curTick} maxSvrTick{_cmdBuffer.MaxServerTickInBuffer} _tickSinceGameStart {_tickSinceGameStart} uv {playerInput.inputUV}");
             //}
+            //还未检验过的input , 全部发给服务器...
             if (curTick > _cmdBuffer.MaxServerTickInBuffer) {
                 //TODO combine all history inputs into one Msg 
                 //Debug.Log("SendInput " + curTick +" _tickSinceGameStart " + _tickSinceGameStart);
@@ -405,8 +415,8 @@ namespace Lockstep.Game {
             }
             return true;
         }
-
-
+        
+        //step forward
         void Step(ServerFrame frame, bool isNeedGenSnap = true){
             //Debug.Log("Step: " + _world.Tick + " TargetTick: " + TargetTick);
             _commonStateService.SetTick(_world.Tick);
@@ -473,7 +483,9 @@ namespace Lockstep.Game {
         void OnPursuingFrame(){
             _constStateService.IsPursueFrame = true;
             Debug.Log($"PurchaseServering curTick:" + _world.Tick);
+            //追帧进度
             var progress = _world.Tick * 1.0f / _cmdBuffer.CurTickInServer;
+            //
             EventHelper.Trigger(EEvent.PursueFrameProcess, progress);
         }
 

@@ -44,6 +44,7 @@ namespace Lockstep.Game {
         private float _curLoadProgress;
         private float _framePursueRate;
 
+        //追帧百分比
         public float FramePursueRate {
             get { return _framePursueRate; }
             set { _framePursueRate = System.Math.Max(System.Math.Min(1f, value), 0f); }

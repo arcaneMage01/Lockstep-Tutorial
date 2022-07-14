@@ -55,7 +55,8 @@ namespace Lockstep.Game {
                 _timer += deltaTime;
                 if (_timer > _checkInterval) {
                     _timer = 0;
-                    if (!hasMissTick) { 
+                    if (!hasMissTick) {
+                        //根据时延做插值调整，延迟越高预测长度越大
                         var preSend = _cmdBuffer._maxPing * 1.0f / NetworkDefine.UPDATE_DELTATIME;
                         _targetPreSendTick = _targetPreSendTick * _oldPercent + preSend * (1 - _oldPercent);
 
@@ -74,6 +75,7 @@ namespace Lockstep.Game {
                     hasMissTick = false;
                 }
 
+                //missTick说明客户端帧没有及时到达服务器，这里动态调整 simulatorService.PreSendInputCount
                 if (missTick != -1) {
                     var delayTick = _simulatorService.TargetTick - missTick;
                     var targetPreSendTick =
@@ -118,10 +120,14 @@ namespace Lockstep.Game {
         /// the tick client need run in next update
         private int _nextClientTick;
 
+        //current server frame received
         public int CurTickInServer { get; private set; }
+        //use to Confirm frames if sFrame == cFrame
         public int NextTickToCheck { get; private set; }
+        //the last server tick in sFrameBuffer( may be exists null frames ahead of last tick)
         public int MaxServerTickInBuffer { get; private set; } = -1;
         public bool IsNeedRollback { get; private set; }
+        //the last received server frame(not null) in sFrameBuffer 
         public int MaxContinueServerTick { get; private set; }
 
         public byte LocalId;
@@ -186,6 +192,7 @@ namespace Lockstep.Game {
             for (int i = 0; i < count; i++) {
                 var data = frames[i];
                 //Debug.Log("PushServerFrames" + data.tick);
+                // calculate frame delay
                 if (_tick2SendTimestamp.TryGetValue(data.tick, out var sendTick)) {
                     var delay = LTime.realtimeSinceStartupMS - sendTick;
                     _delays.Add(delay);
@@ -210,10 +217,12 @@ namespace Lockstep.Game {
                 if (data.tick > MaxServerTickInBuffer) {
                     MaxServerTickInBuffer = data.tick;
                 }
-
+                
                 var targetIdx = data.tick % _bufferSize;
                 if (_serverBuffer[targetIdx] == null || _serverBuffer[targetIdx].tick != data.tick) {
                     _serverBuffer[targetIdx] = data;
+                    
+                    //该帧 (data.Inputs isMiss = true) 是服务器设置的，说明我们消息没有及时到达
                     if (data.tick > _predictHelper.nextCheckMissTick && data.Inputs[LocalId].IsMiss &&
                         _predictHelper.missTick == -1) {
                         _predictHelper.missTick = data.tick;
@@ -262,13 +271,16 @@ namespace Lockstep.Game {
             if (MaxContinueServerTick <= 0) return;
             if (MaxContinueServerTick < CurTickInServer // has some middle frame pack was lost
                 || _nextClientTick >
-                MaxContinueServerTick + (_maxClientPredictFrameCount - 3) //client has predict too much
+                MaxContinueServerTick + (_maxClientPredictFrameCount - 3) //client has predicts too many
             ) {
                 Debug.Log("SendMissFrameReq " + MaxContinueServerTick);
                 _networkService.SendMissFrameReq(MaxContinueServerTick);
             }
         }
 
+        /**
+         * 计算一段时间内的ping值 + 与服务器对时
+         */
         private void UpdatePingVal(float deltaTime){
             _pingTimer += deltaTime;
             if (_pingTimer > 0.5f) {
@@ -292,7 +304,7 @@ namespace Lockstep.Game {
                 _maxPing = Int64.MinValue;
             }
         }
-
+        
         public void SendInput(Msg_PlayerInput input){
             _tick2SendTimestamp[input.Tick] = LTime.realtimeSinceStartupMS;
 #if DEBUG_SHOW_INPUT
